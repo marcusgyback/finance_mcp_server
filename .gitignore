@@ -1,0 +1,23 @@
+# Environment — never commit real credentials
+.env
+
+# Clients registry — contains live API keys
+# Commit clients.json.example instead, never the real file
+clients.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# Distribution
+dist/
+build/
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
