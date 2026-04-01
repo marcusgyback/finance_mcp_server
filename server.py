@@ -28,7 +28,6 @@ from starlette.responses import JSONResponse
 from auth.clients import get_client_folder, get_client_name, validate_api_key
 from auth.context import client_folder
 from tools.storage import register_tools as register_storage_tools
-from tools.workflows import register_tools as register_workflow_tools
 
 # ---------------------------------------------------------------------------
 # Server instance
@@ -39,7 +38,6 @@ mcp = FastMCP("Financial Analysis Server")
 # Register all tools
 # ---------------------------------------------------------------------------
 register_storage_tools(mcp)
-register_workflow_tools(mcp)
 
 # ---------------------------------------------------------------------------
 # Auth middleware — validates api_key query param on every request
