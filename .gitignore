@@ -2,8 +2,6 @@
 .env
 
 # Clients registry — contains live API keys
-# Commit clients.json.example instead, never the real file
-clients.json
 
 # Python
 __pycache__/

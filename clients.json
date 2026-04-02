@@ -1,0 +1,8 @@
+{
+  "demo-key-123": {
+    "name": "Demo Client",
+    "folder": "demo",
+    "active": true,
+    "note": "Local demo key"
+  }
+}
