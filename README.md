@@ -96,13 +96,3 @@ docker run --env-file .env -p 8000:8000 financial-mcp-server
 `read_spreadsheet` opens workbooks with `data_only=True`, which reads cached computed values rather than raw formulas. These cached values are only present if the workbook was opened and saved in Excel (or a compatible app) after the last edit. Files generated programmatically and never opened in Excel may return `None` for formula cells.
 
 ---
-
-## Adding Workflow Logic
-
-Open `tools/workflows.py`. Each of the three placeholder tools contains a `# TODO` comment with a suggested implementation approach:
-
-- **`run_financial_analysis`** — fetch a document, parse it, run metric calculations, return structured results.
-- **`generate_report`** — read an input document, format it, write output as `.docx` or `.xlsx`.
-- **`compare_documents`** — fetch two documents, align line items, compute variances.
-
-The placeholder shells already expose the correct tool names and parameter descriptions to Claude.  Replace the `return "[PLACEHOLDER]..."` line in each function with your real logic.  No changes to `server.py` are needed.
