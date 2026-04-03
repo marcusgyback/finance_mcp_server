@@ -104,15 +104,22 @@ def register_tools(mcp: FastMCP) -> None:
     # Tool 2 — read_pdf
     # ------------------------------------------------------------------
     @mcp.tool()
-    async def read_pdf(path: str) -> str:
-        """Read a PDF file from storage and return its full text content.
+    async def read_pdf(
+        path: str,
+        page_start: int = 1,
+        page_end: Optional[int] = None,
+    ) -> str:
+        """Read a PDF file from storage and return its text content.
 
-        Plain text and tables are extracted separately.  Tables are formatted
-        with aligned columns so that row labels stay aligned with their values,
-        which is essential for financial statements.
+        For large PDFs, use page_start and page_end to read in chunks.
+        Always check total_pages in the response and make multiple calls
+        if needed to cover the full document.
 
         Args:
-            path: Storage key of the PDF file, e.g. "documents/annual-report.pdf".
+            path:       Storage key of the PDF file.
+            page_start: First page to read (1-based, default: 1).
+            page_end:   Last page to read inclusive. If omitted, reads up to
+                        50 pages from page_start.
         """
         client = _storage()
         raw = client.get_object(_scoped_path(path))
@@ -120,21 +127,33 @@ def register_tools(mcp: FastMCP) -> None:
         output_sections: list[str] = []
 
         with pdfplumber.open(io.BytesIO(raw)) as pdf:
-            for page_num, page in enumerate(pdf.pages, start=1):
+            total_pages = len(pdf.pages)
+            start_idx = max(0, page_start - 1)
+            end_idx = min(total_pages, (page_end or page_start + 49))
+            pages_to_read = pdf.pages[start_idx:end_idx]
+
+            output_sections.append(
+                f"PDF: {path} | Total pages: {total_pages} | "
+                f"Reading pages {start_idx + 1}–{end_idx}"
+            )
+
+            for page_num, page in enumerate(pages_to_read, start=start_idx + 1):
                 output_sections.append(f"=== Page {page_num} ===")
 
-                # Extract plain text (excluding table bounding boxes)
                 text = page.extract_text()
                 if text and text.strip():
                     output_sections.append(text.strip())
 
-                # Extract tables
                 tables = page.extract_tables()
                 for table_idx, table in enumerate(tables, start=1):
-                    output_sections.append(
-                        f"\n[Table {table_idx} — Page {page_num}]"
-                    )
+                    output_sections.append(f"\n[Table {table_idx} — Page {page_num}]")
                     output_sections.append(_format_table(table))
+
+            if end_idx < total_pages:
+                output_sections.append(
+                    f"\n--- {total_pages - end_idx} more pages remaining. "
+                    f"Call read_pdf with page_start={end_idx + 1} to continue. ---"
+                )
 
         if not output_sections:
             return "No text content could be extracted from this PDF."
@@ -146,52 +165,66 @@ def register_tools(mcp: FastMCP) -> None:
     # ------------------------------------------------------------------
     @mcp.tool()
     async def read_spreadsheet(
-        path: str, sheet_name: Optional[str] = None
+        path: str,
+        sheet_name: Optional[str] = None,
+        row_start: int = 1,
+        row_end: Optional[int] = None,
     ) -> str:
         """Read an Excel workbook (.xlsx) from storage and return its data as
         CSV-formatted text.
 
-        Computed cell values are returned (not raw formulas).  Note: openpyxl's
-        data_only=True mode relies on cached values stored in the file — if the
-        workbook was never opened and saved in Excel after the last edit, formula
-        cells may return None instead of computed values.
+        For large spreadsheets, use row_start and row_end to read in chunks.
+        Always check total_rows in the response and make multiple calls if
+        needed to cover all data.
 
         Args:
             path:       Storage key of the .xlsx file.
-            sheet_name: Name of a specific sheet to read.  If omitted, all
-                        sheets are returned.
+            sheet_name: Name of a specific sheet to read. If omitted, reads
+                        the first sheet.
+            row_start:  First row to read (1-based, default: 1).
+            row_end:    Last row to read inclusive. If omitted, reads up to
+                        1000 rows from row_start.
         """
         client = _storage()
         raw = client.get_object(_scoped_path(path))
 
-        # openpyxl cannot open from BytesIO when data_only=True in all versions,
-        # so we write to a named temp file first.
         with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
             tmp.write(raw)
             tmp_path = tmp.name
 
         try:
-            wb = openpyxl.load_workbook(tmp_path, data_only=True)
-            sheets_to_read = (
-                [sheet_name] if sheet_name else wb.sheetnames
-            )
+            wb = openpyxl.load_workbook(tmp_path, data_only=True, read_only=True)
+            name = sheet_name or wb.sheetnames[0]
 
-            sections: list[str] = []
-            for name in sheets_to_read:
-                if name not in wb.sheetnames:
-                    sections.append(f"Sheet '{name}' not found in workbook.")
+            if name not in wb.sheetnames:
+                return f"Sheet '{name}' not found. Available sheets: {', '.join(wb.sheetnames)}"
+
+            ws = wb[name]
+            total_rows = ws.max_row or 0
+            end = min(total_rows, row_end or row_start + 999)
+
+            sections: list[str] = [
+                f"File: {path} | Sheet: {name} | Total rows: {total_rows} | "
+                f"Reading rows {row_start}–{end}",
+                f"=== Sheet: {name} ===",
+            ]
+
+            rows: list[str] = []
+            for row_idx, row in enumerate(ws.iter_rows(values_only=True), start=1):
+                if row_idx < row_start:
                     continue
+                if row_idx > end:
+                    break
+                cells = ["" if cell is None else str(cell) for cell in row]
+                rows.append(",".join(_csv_escape(c) for c in cells))
 
-                ws = wb[name]
-                sections.append(f"=== Sheet: {name} ===")
-                rows: list[str] = []
-                for row in ws.iter_rows(values_only=True):
-                    # Convert each cell to string, treat None as empty
-                    cells = [
-                        "" if cell is None else str(cell) for cell in row
-                    ]
-                    rows.append(",".join(_csv_escape(c) for c in cells))
-                sections.append("\n".join(rows))
+            sections.append("\n".join(rows))
+
+            if end < total_rows:
+                sections.append(
+                    f"\n--- {total_rows - end} more rows remaining. "
+                    f"Call read_spreadsheet with row_start={end + 1} to continue. ---"
+                )
         finally:
             os.unlink(tmp_path)
 
