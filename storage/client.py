@@ -34,11 +34,12 @@ class StorageClient:
 
         kwargs: Dict[str, Any] = {
             "region_name": region,
-            # Path-style addressing is required by Filestash and most
-            # S3-compatible services. AWS S3 uses virtual-hosted style by
-            # default, but Filestash does not support that.
-            "config": Config(s3={"addressing_style": "path"}),
         }
+        # Path-style addressing is required by Filestash and most S3-compatible
+        # services. For native AWS S3 (no custom endpoint), use the default
+        # virtual-hosted style to avoid redirect issues.
+        if endpoint_url:
+            kwargs["config"] = Config(s3={"addressing_style": "path"})
         if endpoint_url:
             kwargs["endpoint_url"] = endpoint_url
         if access_key and secret_key:
