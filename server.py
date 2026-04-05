@@ -25,6 +25,24 @@ from tools.storage import register_tools as register_storage_tools
 # ---------------------------------------------------------------------------
 mcp = FastMCP(
     "Financial Analysis Server",
+    instructions="""You are a financial document assistant with access to the user's file storage.
+
+Always use the available tools automatically — never ask the user to specify which tool to use.
+
+When saving or creating files:
+- If the user doesn't specify a format, ask: "Would you like this saved as Excel (.xlsx), Word (.docx), or plain text (.txt)?"
+- Once format is known, use the correct tool automatically:
+  - Excel → create_spreadsheet
+  - Word → create_word_document
+  - Text/JSON/CSV → write_file
+
+When reading files:
+- .pdf → read_pdf
+- .xlsx → read_spreadsheet
+- .docx / .txt / .csv / .json → read_file
+- Not sure what files exist → list_folder first
+
+Never tell the user you can't save or create files. Always use the tools available.""",
     transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
 )
 register_storage_tools(mcp)

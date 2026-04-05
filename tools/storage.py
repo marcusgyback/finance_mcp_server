@@ -235,11 +235,13 @@ def register_tools(mcp: FastMCP) -> None:
     # ------------------------------------------------------------------
     @mcp.tool()
     async def read_file(path: str) -> str:
-        """Read a text-based file (.json, .csv, .txt) from storage and return
-        its content as a string.
+        """Read a file from storage and return its content as a string.
 
-        JSON files are pretty-printed for readability.  CSV and plain text files
-        are returned as-is.
+        Supported formats:
+        - .docx  — Word document, returns plain text with paragraph breaks
+        - .json  — pretty-printed
+        - .csv   — returned as-is
+        - .txt   — returned as-is
 
         Args:
             path: Storage key of the file to read.
@@ -248,6 +250,13 @@ def register_tools(mcp: FastMCP) -> None:
         raw = client.get_object(_scoped_path(path))
         extension = path.rsplit(".", 1)[-1].lower() if "." in path else ""
 
+        if extension == "docx":
+            doc = Document(io.BytesIO(raw))
+            lines = []
+            for para in doc.paragraphs:
+                lines.append(para.text)
+            return "\n".join(lines)
+
         text = raw.decode("utf-8", errors="replace")
 
         if extension == "json":
@@ -255,7 +264,7 @@ def register_tools(mcp: FastMCP) -> None:
                 parsed = json.loads(text)
                 return json.dumps(parsed, indent=2, ensure_ascii=False)
             except json.JSONDecodeError:
-                return text  # Return raw text if JSON is malformed
+                return text
 
         # .csv and .txt (and anything else) — return verbatim
         return text
